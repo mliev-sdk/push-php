@@ -1,0 +1,49 @@
+{
+    "name": "mliev-sdk/push-php",
+    "description": "PHP SDK for Mliev Message Push Service",
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Mliev",
+            "email": "contact@mliev.com"
+        }
+    ],
+    "require": {
+        "php": ">=7.4",
+        "ext-curl": "*",
+        "ext-json": "*"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^9.6"
+    },
+    "scripts": {
+        "test": "phpunit"
+    },
+    "autoload": {
+        "psr-4": {
+            "MlievSdk\\PushPHP\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "MlievSdk\\PushPHP\\Tests\\": "tests/"
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true,
+    "keywords": [
+        "message",
+        "push",
+        "sms",
+        "email",
+        "notification",
+        "sdk"
+    ],
+    "homepage": "https://github.com/muleiwu/mliev-push-php",
+    "support": {
+        "issues": "https://github.com/muleiwu/mliev-push-php/issues",
+        "source": "https://github.com/muleiwu/mliev-push-php"
+    }
+}
+
