@@ -16,7 +16,7 @@ Mliev 消息推送服务的 PHP SDK。支持短信、邮件、企业微信、钉
 ## 安装
 
 ```bash
-composer require mliev/message-push
+composer require mliev-sdk/push-php
 ```
 
 ## 快速开始

@@ -16,7 +16,7 @@ PHP SDK for Mliev Message Push Service. Supports SMS, Email, WeChatWork, DingTal
 ## Installation
 
 ```bash
-composer require mliev/message-push
+composer require mliev-sdk/push-php
 ```
 
 ## Quick Start
