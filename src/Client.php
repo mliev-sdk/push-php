@@ -44,7 +44,7 @@ class Client
      * @param int         $channelId      Channel ID
      * @param string      $receiver       Receiver (phone/email/user ID)
      * @param array       $templateParams Template parameters
-     * @param string|null $signatureName  SMS signature name (optional)
+     * @param string|null $signatureName  Alias from signature_names; required when signature_required is true
      * @param string|null $scheduledAt    Scheduled time in ISO 8601 format (optional)
      *
      * @return Response
@@ -60,7 +60,7 @@ class Client
         $data = [
             'channel_id' => $channelId,
             'receiver' => $receiver,
-            'template_params' => $templateParams,
+            'template_params' => $templateParams === [] ? (object) [] : $templateParams,
         ];
 
         if ($signatureName !== null) {
@@ -80,7 +80,7 @@ class Client
      * @param int         $channelId      Channel ID
      * @param array       $receivers      Array of receivers
      * @param array       $templateParams Template parameters (shared by all receivers)
-     * @param string|null $signatureName  SMS signature name (optional)
+     * @param string|null $signatureName  Alias from signature_names; required when signature_required is true
      * @param string|null $scheduledAt    Scheduled time in ISO 8601 format (optional)
      *
      * @return Response
@@ -96,7 +96,7 @@ class Client
         $data = [
             'channel_id' => $channelId,
             'receivers' => $receivers,
-            'template_params' => $templateParams,
+            'template_params' => $templateParams === [] ? (object) [] : $templateParams,
         ];
 
         if ($signatureName !== null) {
@@ -121,6 +121,47 @@ class Client
     public function queryTask(string $taskId): Response
     {
         return $this->request('GET', '/api/v1/messages/' . $taskId);
+    }
+
+    /**
+     * List enabled channels, including blocked ones, without consuming sending quota.
+     *
+     * getData() contains items, total, page and size. Each item contains id, name,
+     * type, message_template_id, template_name and readiness (state, blocker_codes).
+     * Pagination and type are validated by the server; page_size is limited to 100.
+     *
+     * @param string|null $type     Message type filter; null or empty means all types
+     * @param int         $page     Page number, starting at 1
+     * @param int         $pageSize Items per page, default 20
+     * @return Response
+     * @throws MessagePushException
+     */
+    public function listChannels(?string $type = null, int $page = 1, int $pageSize = 20): Response
+    {
+        $query = ['page' => $page, 'page_size' => $pageSize];
+        if ($type !== null && $type !== '') {
+            $query['type'] = $type;
+        }
+
+        return $this->request('GET', '/api/v1/channels', null, $query);
+    }
+
+    /**
+     * Get channel configuration. A blocked channel is still a successful query.
+     *
+     * getData() contains the channel list fields plus template, signature_required
+     * and signature_names. template is null when missing; otherwise it contains id,
+     * template_name, content_type, content, variables and description. variables is
+     * null for invalid configuration, [] for no variables, or an array of strings.
+     * Pass the selected signature_names alias unchanged to sendMessage/sendBatch.
+     *
+     * @param int $channelId Channel ID from listChannels()
+     * @return Response
+     * @throws MessagePushException
+     */
+    public function getChannel(int $channelId): Response
+    {
+        return $this->request('GET', '/api/v1/channels/' . $channelId);
     }
 
     /**
@@ -191,17 +232,21 @@ class Client
      * @param string     $method HTTP method
      * @param string     $path   Request path
      * @param array|null $data   Request data
+     * @param array      $query  URL query parameters, excluded from the signature
      *
      * @return Response
      * @throws MessagePushException
      */
-    private function request(string $method, string $path, ?array $data = null): Response
+    private function request(string $method, string $path, ?array $data = null, array $query = []): Response
     {
         $timestamp = (string) time();
         $nonce = bin2hex(random_bytes(16));
         $signature = $this->generateSignature($method, $path, $data, $timestamp, $nonce);
 
         $url = $this->baseUrl . $path;
+        if ($query !== []) {
+            $url .= '?' . http_build_query($query, '', '&', PHP_QUERY_RFC3986);
+        }
         $body = $data ? json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : '';
 
         $headers = [
@@ -266,4 +311,3 @@ class Client
         return $responseObj;
     }
 }
-

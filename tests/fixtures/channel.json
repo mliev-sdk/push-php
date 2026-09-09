@@ -1,0 +1,18 @@
+{
+  "id": 42,
+  "name": "验证码通道",
+  "type": "sms",
+  "message_template_id": 7,
+  "template_name": "登录验证码",
+  "readiness": {"state": "ready", "blocker_codes": []},
+  "template": {
+    "id": 7,
+    "template_name": "登录验证码",
+    "content_type": "text",
+    "content": "您的验证码是{code}，{expire}分钟内有效。",
+    "variables": ["code", "expire"],
+    "description": "登录通知"
+  },
+  "signature_required": true,
+  "signature_names": ["验证码", "通知"]
+}

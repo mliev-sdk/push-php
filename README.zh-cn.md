@@ -41,7 +41,7 @@ try {
         1,                          // 通道 ID
         '13800138000',              // 接收者（手机号/邮箱/用户ID）
         ['code' => '123456'],       // 模板参数
-        '公司名称'                   // 短信签名（可选）
+        '公司名称'                   // signature_names 中的别名；signature_required=true 时必填
     );
 
     echo "任务 ID: " . $response->getTaskId() . "\n";
@@ -59,14 +59,14 @@ try {
 
 ```php
 $response = $client->sendMessage(
-    channelId: 1,
-    receiver: '13800138000',
-    templateParams: [
+    1,
+    '13800138000',
+    [
         'code' => '123456',
         'expire_time' => '5'
     ],
-    signatureName: '公司名称',   // 可选：短信签名
-    scheduledAt: '2025-12-01T10:00:00Z'  // 可选：定时发送时间（ISO 8601 格式）
+    '公司名称',   // signature_names 中的别名；signature_required=true 时必填
+    '2025-12-01T10:00:00Z'  // 可选：定时发送时间（ISO 8601 格式）
 );
 
 if ($response->isSuccess()) {
@@ -78,17 +78,17 @@ if ($response->isSuccess()) {
 
 ```php
 $response = $client->sendBatch(
-    channelId: 1,
-    receivers: [
+    1,
+    [
         '13800138000',
         '13800138001',
         '13800138002'
     ],
-    templateParams: [
+    [
         'content' => '系统将于今晚22:00进行维护',
         'duration' => '2小时'
     ],
-    signatureName: '公司名称'
+    '公司名称'
 );
 
 echo "批次 ID: " . $response->getBatchId() . "\n";
@@ -105,6 +105,50 @@ $data = $response->getData();
 echo "状态: " . $data['status'] . "\n";
 echo "回调状态: " . ($data['callback_status'] ?? '无') . "\n";
 ```
+
+### 通道目录与可视化接入
+
+使用服务端的通道列表和聚合详情构建业务系统表单，方法继续返回现有 `Response` 对象：
+
+```php
+// 默认：全部类型、第 1 页、每页 20 条。服务端限制每页最多 100 条。
+$page = $client->listChannels()->getData();
+$smsPage = $client->listChannels('sms', 2, 20)->getData();
+foreach ($page['items'] as $channel) {
+    echo $channel['id'] . ': ' . $channel['template_name'] . ' (' . $channel['readiness']['state'] . ')' . PHP_EOL;
+}
+
+// 使用用户选择的通道 ID。
+$detail = $client->getChannel(42)->getData();
+if ($detail['template'] !== null) {
+    echo $detail['template']['content'];
+    $variables = $detail['template']['variables'];
+}
+$signatureRequired = $detail['signature_required'];
+$signatureNames = $detail['signature_names'];
+```
+
+- 列表数据包含 `items/total/page/size`；每个通道包含 `id/name/type/message_template_id/template_name/readiness`，详情额外包含 `template/signature_required/signature_names`。
+- `template` 包含系统模板的 `id/template_name/content_type/content/variables/description`；`readiness` 包含 `state` 和 `blocker_codes`。
+- `ready/degraded` 通道可选；`blocked` 仍是成功的配置查询结果，应在界面置灰并按需展示原因码。
+- `template: null` 表示模板缺失或被删除；`variables: null` 表示变量配置无效，`variables: []` 表示没有变量。`getData()` 保留两者区别。
+- 为返回的每个变量在 `$templateParams` 中提供字符串值。`$signatureName` 从 `signature_names` 选择，适用于短信签名和邮件标题；`signature_required=true` 时必填，否则可传 null。空模板参数会以 JSON 对象 `{}` 发送。
+- 查询沿用 HMAC 鉴权与现有限流，不消耗发送配额。查询参数编码到 URL 但不参与签名，GET 正文为空。SDK 不缓存、不筛除不可用通道、不自动翻页。
+- 发送时服务端重新检查配置。目录错误通过 `MessagePushException` 保留 `400/404/500` 错误码；鉴权和限流仍可能使用 HTTP 200 携带非零业务码。非法 JSON 和网络错误使用 `RequestException`。
+
+兼容 PHP 7.4 的[目录示例](examples/catalog.php) 展示“列表 → 详情 → 填写变量 → 选择签名 → 发送”。在业务后端设置凭据：
+
+```bash
+export PUSH_BASE_URL='https://your-domain.com'
+export PUSH_APP_ID='your_app_id'
+export PUSH_APP_SECRET='your_app_secret'
+# 只查询配置。
+php examples/catalog.php --channel=42
+# 将 ID、别名、变量和接收者替换为实际选择。
+php examples/catalog.php --channel=42 --signature='验证码' --params='{"code":"123456","expire":"5"}' --receiver='13800138000' --send
+```
+
+服务端需提供 `GET /api/v1/channels` 和 `GET /api/v1/channels/{id}`。
 
 ## 响应对象
 
@@ -157,10 +201,10 @@ try {
 
 ```php
 $client = new Client(
-    baseUrl: 'https://your-domain.com',
-    appId: 'your_app_id',
-    appSecret: 'your_app_secret',
-    timeout: 30  // 请求超时时间，单位秒（默认：10）
+    'https://your-domain.com',
+    'your_app_id',
+    'your_app_secret',
+    30  // 请求超时时间，单位秒（默认：10）
 );
 ```
 
