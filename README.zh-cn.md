@@ -96,6 +96,41 @@ echo "总数: " . $response->getData()['total_count'] . "\n";
 echo "成功: " . $response->getData()['success_count'] . "\n";
 ```
 
+### 邮件附件
+
+邮件通道的单发和批量发送都支持附件。推荐使用值对象读取本地文件：
+
+```php
+use MlievSdk\PushPHP\EmailAttachment;
+
+$attachment = EmailAttachment::fromFile('./invoice.pdf');
+$response = $client->sendMessage(
+    12,
+    'customer@example.com',
+    ['order_id' => 'ORDER-1001'],
+    'invoice-ready', // 邮件标题别名
+    null,            // 可选定时发送时间
+    [$attachment]
+);
+```
+
+也可以使用内存内容或已经编码的内容：
+
+```php
+$generated = EmailAttachment::fromContent('report.csv', "name,total\nAlice,42\n", 'text/csv');
+$encoded = EmailAttachment::fromBase64('data.bin', 'AAEC', 'application/octet-stream');
+```
+
+将同一个附件数组作为批量发送的最后一个参数，每个收件人都会收到这些附件：
+
+```php
+$response = $client->sendBatch(12, ['a@example.com', 'b@example.com'], [], 'invoice-ready', null, [$attachment]);
+```
+
+最后一个参数也接受包含 `filename`、可选 `content_type` 和 `content_base64` 的线格式数组。Base64 不能包含 `data:` URL 前缀。批量发送的所有收件人共用同一组附件。服务端默认限制为最多 5 个、单个 5 MiB、合计 10 MiB，但部署方可以修改，因此 SDK 不硬编码容量限制。本地文件助手会将整个文件读入内存。
+
+可运行的[邮件附件示例](examples/email-attachment.php)展示了完整调用方式。
+
 ### 查询任务状态
 
 ```php
@@ -249,4 +284,3 @@ $client = new Client(
 ## 许可证
 
 MIT License - 详见 [LICENSE](LICENSE)
-

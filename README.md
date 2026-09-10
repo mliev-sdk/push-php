@@ -96,6 +96,41 @@ echo "Total: " . $response->getData()['total_count'] . "\n";
 echo "Success: " . $response->getData()['success_count'] . "\n";
 ```
 
+### Email Attachments
+
+Email channels support attachments for single and batch sends. Use the value object for local files:
+
+```php
+use MlievSdk\PushPHP\EmailAttachment;
+
+$attachment = EmailAttachment::fromFile('./invoice.pdf');
+$response = $client->sendMessage(
+    12,
+    'customer@example.com',
+    ['order_id' => 'ORDER-1001'],
+    'invoice-ready', // Email title alias
+    null,            // Optional scheduled time
+    [$attachment]
+);
+```
+
+Generated content and pre-encoded content are supported as well:
+
+```php
+$generated = EmailAttachment::fromContent('report.csv', "name,total\nAlice,42\n", 'text/csv');
+$encoded = EmailAttachment::fromBase64('data.bin', 'AAEC', 'application/octet-stream');
+```
+
+Pass the same attachment array as the final batch argument; every recipient receives it:
+
+```php
+$response = $client->sendBatch(12, ['a@example.com', 'b@example.com'], [], 'invoice-ready', null, [$attachment]);
+```
+
+The final parameter also accepts wire-format arrays containing `filename`, optional `content_type`, and `content_base64`. Base64 must not include a `data:` URL prefix. Batch recipients share the same attachments. The server defaults to 5 attachments, 5 MiB per file, and 10 MiB total, but operators can change those limits; the SDK deliberately does not hard-code them. File helpers read the full file into memory.
+
+See the runnable [email attachment example](examples/email-attachment.php).
+
 ### Query Task Status
 
 ```php

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace MlievSdk\PushPHP\Tests;
 
 use MlievSdk\PushPHP\Client;
+use MlievSdk\PushPHP\EmailAttachment;
 use MlievSdk\PushPHP\Exception\MessagePushException;
 use MlievSdk\PushPHP\Exception\RequestException;
 use PHPUnit\Framework\TestCase;
@@ -295,6 +296,35 @@ class CatalogTest extends TestCase
                 self::assertSame([], get_object_vars($body->template_params));
                 self::assertFalse(property_exists($body, 'signature_name'));
             }
+        }
+    }
+
+    public function testSingleAndBatchAttachmentsAreSerializedAndSigned(): void
+    {
+        $this->routes([
+            'POST /api/v1/messages' => $this->success(['task_id' => 'attachment-task']),
+            'POST /api/v1/messages/batch' => $this->success(['batch_id' => 'attachment-batch']),
+        ]);
+        $attachments = [
+            EmailAttachment::fromContent('报告.txt', 'hello', 'text/plain'),
+            [
+                'filename' => 'data.bin',
+                'content_type' => 'application/octet-stream',
+                'content_base64' => 'AAEC',
+            ],
+        ];
+
+        $this->client->sendMessage(42, 'first@example.com', [], '通知', null, $attachments);
+        $this->client->sendBatch(42, ['first@example.com', 'second@example.com'], [], '通知', null, $attachments);
+
+        $requests = $this->requests();
+        self::assertCount(2, $requests);
+        foreach ($requests as $request) {
+            $this->assertSignedRequest($request);
+            $body = json_decode($request['body'], true);
+            self::assertSame('报告.txt', $body['attachments'][0]['filename']);
+            self::assertSame('aGVsbG8=', $body['attachments'][0]['content_base64']);
+            self::assertSame('AAEC', $body['attachments'][1]['content_base64']);
         }
     }
 }

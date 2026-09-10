@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace MlievSdk\PushPHP\Tests;
 
 use MlievSdk\PushPHP\Client;
+use MlievSdk\PushPHP\EmailAttachment;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 use ReflectionMethod;
@@ -173,6 +174,36 @@ class ClientTest extends TestCase
 
         $nestedKeys = array_keys($result['nested']);
         $this->assertEquals(['a', 'b'], $nestedKeys);
+    }
+
+    public function testNormalizeAttachmentsAcceptsObjectsAndWireArrays(): void
+    {
+        $method = $this->getPrivateMethod('normalizeAttachments');
+        $result = $method->invoke($this->client, [
+            EmailAttachment::fromContent('message.txt', 'hello', 'text/plain'),
+            [
+                'filename' => 'data.bin',
+                'content_base64' => 'AAEC',
+            ],
+        ]);
+
+        self::assertSame('message.txt', $result[0]['filename']);
+        self::assertSame('aGVsbG8=', $result[0]['content_base64']);
+        self::assertSame('text/plain', $result[0]['content_type']);
+        self::assertSame([
+            'filename' => 'data.bin',
+            'content_base64' => 'AAEC',
+        ], $result[1]);
+    }
+
+    public function testNormalizeAttachmentsRejectsInvalidWireArray(): void
+    {
+        $method = $this->getPrivateMethod('normalizeAttachments');
+        $this->expectException(\InvalidArgumentException::class);
+        $method->invoke($this->client, [[
+            'filename' => 'data.bin',
+            'content_base64' => 'not-base64',
+        ]]);
     }
 
     /**
@@ -356,4 +387,3 @@ class ClientTest extends TestCase
         $this->assertEquals($expectedSignature, $signature);
     }
 }
-

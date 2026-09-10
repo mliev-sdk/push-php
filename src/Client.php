@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace MlievSdk\PushPHP;
 
+use InvalidArgumentException;
 use MlievSdk\PushPHP\Exception\MessagePushException;
 use MlievSdk\PushPHP\Exception\RequestException;
 use MlievSdk\PushPHP\Response\Response;
@@ -46,16 +47,19 @@ class Client
      * @param array       $templateParams Template parameters
      * @param string|null $signatureName  Alias from signature_names; required when signature_required is true
      * @param string|null $scheduledAt    Scheduled time in ISO 8601 format (optional)
+     * @param array       $attachments    EmailAttachment objects or attachment wire-format arrays
      *
      * @return Response
      * @throws MessagePushException
+     * @throws InvalidArgumentException
      */
     public function sendMessage(
         int $channelId,
         string $receiver,
         array $templateParams = [],
         ?string $signatureName = null,
-        ?string $scheduledAt = null
+        ?string $scheduledAt = null,
+        array $attachments = []
     ): Response {
         $data = [
             'channel_id' => $channelId,
@@ -71,6 +75,10 @@ class Client
             $data['scheduled_at'] = $scheduledAt;
         }
 
+        if ($attachments !== []) {
+            $data['attachments'] = $this->normalizeAttachments($attachments);
+        }
+
         return $this->request('POST', '/api/v1/messages', $data);
     }
 
@@ -82,16 +90,19 @@ class Client
      * @param array       $templateParams Template parameters (shared by all receivers)
      * @param string|null $signatureName  Alias from signature_names; required when signature_required is true
      * @param string|null $scheduledAt    Scheduled time in ISO 8601 format (optional)
+     * @param array       $attachments    EmailAttachment objects or attachment wire-format arrays shared by all receivers
      *
      * @return Response
      * @throws MessagePushException
+     * @throws InvalidArgumentException
      */
     public function sendBatch(
         int $channelId,
         array $receivers,
         array $templateParams = [],
         ?string $signatureName = null,
-        ?string $scheduledAt = null
+        ?string $scheduledAt = null,
+        array $attachments = []
     ): Response {
         $data = [
             'channel_id' => $channelId,
@@ -107,7 +118,51 @@ class Client
             $data['scheduled_at'] = $scheduledAt;
         }
 
+        if ($attachments !== []) {
+            $data['attachments'] = $this->normalizeAttachments($attachments);
+        }
+
         return $this->request('POST', '/api/v1/messages/batch', $data);
+    }
+
+    /**
+     * Normalize and validate attachment objects and raw wire-format arrays.
+     *
+     * @param array $attachments
+     * @return array
+     */
+    private function normalizeAttachments(array $attachments): array
+    {
+        $normalized = [];
+        foreach ($attachments as $index => $attachment) {
+            if ($attachment instanceof EmailAttachment) {
+                $normalized[] = $attachment->toArray();
+                continue;
+            }
+            if (!is_array($attachment)) {
+                throw new InvalidArgumentException(sprintf(
+                    'Attachment %s must be an EmailAttachment or array',
+                    (string) $index
+                ));
+            }
+            if (!isset($attachment['filename']) || !is_string($attachment['filename'])) {
+                throw new InvalidArgumentException(sprintf('Attachment %s filename must be a string', (string) $index));
+            }
+            if (!isset($attachment['content_base64']) || !is_string($attachment['content_base64'])) {
+                throw new InvalidArgumentException(sprintf('Attachment %s content_base64 must be a string', (string) $index));
+            }
+            $contentType = $attachment['content_type'] ?? null;
+            if ($contentType !== null && !is_string($contentType)) {
+                throw new InvalidArgumentException(sprintf('Attachment %s content_type must be a string', (string) $index));
+            }
+            $normalized[] = EmailAttachment::fromBase64(
+                $attachment['filename'],
+                $attachment['content_base64'],
+                $contentType
+            )->toArray();
+        }
+
+        return $normalized;
     }
 
     /**
