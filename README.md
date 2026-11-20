@@ -15,16 +15,29 @@ PHP SDK for Mliev Message Push Service. Supports SMS, Email, WeChatWork, DingTal
 
 ## Message language
 
-Use `en` for a generic English template, `zh-Hans` or `zh-Hant` for Chinese scripts, and `en-GB` for a regional override. An `en-GB` request can use `en` even under the reject policy. Omit the locale to use the channel default. A batch shares one locale. Use `$client->getChannel(42, 'en-GB')` to preview the matched language and signature options. Delivery uses the `resolved_locale` recorded at acceptance.
+Bind a generic English template as `en` to handle `en`, `en-US`, and `en-GB` on one channel. Add an `en-GB` binding when you have UK-specific copy. Omitting the request locale starts matching at the channel default.
 
-```php
-$result = $client->sendMessage(42, 'recipient@example.com', [], null, null, [], 'en');
-```
+| Requested locale | Templates tried in order |
+| --- | --- |
+| `en-GB` | `en-GB` → `en` |
+| `zh-TW`, `zh-HK`, `zh-MO` | Requested region → `zh-Hant` → `zh` |
+| `zh-CN`, `zh-SG` | Requested region → `zh-Hans` → `zh` |
+| `zh-Hant` or `zh-Hans` | Requested script → `zh` |
+| `zh-Hant-CN` | `zh-Hant-CN` → `zh-Hant` → `zh` (explicit Traditional script) |
+| `zh` | Generic `zh` |
+
+If every candidate is unavailable, the channel's `reject` policy returns an error and `use_default` tries the channel default. The server validates the signature against the selected language group. Preview and send with the same requested locale, and choose the signature from that preview.
 
 ## Installation
 
 ```bash
 composer require mliev-sdk/push-php
+```
+
+Language preview requires support in both the server and SDK. Projects using `v1.2.0` can use the following command to pin a commit that supports the locale API.
+
+```bash
+composer require 'mliev-sdk/push-php:dev-main#ed890dbae327b017c1da018b1237b48c13cf7956'
 ```
 
 ## Quick Start
@@ -73,16 +86,21 @@ $response = $client->sendMessage(
         'code' => '123456',
         'expire_time' => '5'
     ],
-    'CompanyName',   // Alias from signature_names; required when signature_required is true
-    '2025-12-01T10:00:00Z'  // Optional: Scheduled time (ISO 8601)
+    'Notice',    // Choose from signature_names in the locale preview
+    null,        // scheduledAt accepts an ISO 8601 timestamp
+    [],          // attachments
+    'en-GB'      // locale
 );
 
 if ($response->isSuccess()) {
     $taskId = $response->getTaskId();
+    $resolvedLocale = $response->getData()['resolved_locale'] ?? null;
 }
 ```
 
 ### Send Batch Messages
+
+All recipients in a batch share the requested locale, template parameters, and signature. Group recipients by locale before submitting.
 
 ```php
 $response = $client->sendBatch(
@@ -96,9 +114,13 @@ $response = $client->sendBatch(
         'content' => 'System maintenance tonight at 22:00',
         'duration' => '2 hours'
     ],
-    'CompanyName'
+    'Notice',
+    null,
+    [],
+    'en-GB'
 );
 
+$resolvedLocale = $response->getData()['resolved_locale'] ?? null;
 echo "Batch ID: " . $response->getBatchId() . "\n";
 echo "Total: " . $response->getData()['total_count'] . "\n";
 echo "Success: " . $response->getData()['success_count'] . "\n";
@@ -145,9 +167,13 @@ See the runnable [email attachment example](examples/email-attachment.php).
 $response = $client->queryTask('550e8400-e29b-41d4-a716-446655440000');
 
 $data = $response->getData();
+$requestedLocale = $data['requested_locale'] ?? null;
+$resolvedLocale = $data['resolved_locale'] ?? null;
 echo "Status: " . $data['status'] . "\n";
 echo "Callback Status: " . ($data['callback_status'] ?? 'N/A') . "\n";
 ```
+
+If an `en-GB` request matched generic English, `requested_locale` is `en-GB` and `resolved_locale` is `en`. Omitting the request locale leaves the former absent. Older tasks may also omit the latter. Scheduled delivery and retries use the locale selected at acceptance.
 
 ### Channel Catalog
 
@@ -162,7 +188,8 @@ foreach ($page['items'] as $channel) {
 }
 
 // Use the channel ID selected by the user.
-$detail = $client->getChannel(42)->getData();
+$detail = $client->getChannel(42, 'en-GB')->getData();
+$matchedLocale = $detail['resolved_locale'] ?? null;
 if ($detail['template'] !== null) {
     echo $detail['template']['content'];
     $variables = $detail['template']['variables'];
@@ -172,8 +199,9 @@ $signatureNames = $detail['signature_names'];
 ```
 
 - List data contains `items/total/page/size`. Each channel contains `id/name/type/message_template_id/template_name/readiness`; detail adds `template/signature_required/signature_names`.
+- `getChannel($id)` previews the default locale. List items expose `default_locale`, `locale_fallback_policy`, and readiness for the default. In a locale preview, top-level readiness and signature options apply to `resolved_locale`. `locales` lists the configured groups.
 - `template` contains `id/template_name/content_type/content/variables/description` for the system template. `readiness` contains `state` and `blocker_codes`.
-- `ready` and `degraded` channels are selectable. `blocked` is still a successful configuration response; disable that option in your UI and show the reason codes as needed.
+- A preview with state `ready` or `degraded` can send. If it is `blocked`, inspect `blocker_codes` and allow the user to preview another locale on the same channel.
 - `template: null` means missing/deleted. `variables: null` means invalid configuration, while `variables: []` means there are no variables. `getData()` preserves both cases.
 - Provide a string value for every returned variable in `$templateParams`. Choose `$signatureName` from `signature_names`, for either SMS signatures or email titles. It is required when `signature_required` is true and may be null otherwise. Empty template parameters are sent as the JSON object `{}`.
 - Queries use HMAC authentication and the existing rate limit, without consuming sending quota. URL query parameters are excluded from the signature and GET has no body. Responses are returned without caching, filtering blocked channels, or fetching additional pages.
@@ -186,9 +214,9 @@ export PUSH_BASE_URL='https://your-domain.com'
 export PUSH_APP_ID='your_app_id'
 export PUSH_APP_SECRET='your_app_secret'
 # Read configuration only.
-php examples/catalog.php --channel=42
+php examples/catalog.php --channel=42 --locale=en-GB
 # Replace the ID, alias, variables, and recipient with your actual selections.
-php examples/catalog.php --channel=42 --signature='验证码' --params='{"code":"123456","expire":"5"}' --receiver='13800138000' --send
+php examples/catalog.php --channel=42 --locale=en-GB --signature='Notice' --params='{"code":"123456","expire":"5"}' --receiver='13800138000' --send
 ```
 
 The server must provide `GET /api/v1/channels` and `GET /api/v1/channels/{id}`.

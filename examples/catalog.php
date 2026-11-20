@@ -14,7 +14,7 @@ try {
     if (!$baseUrl || !$appId || !$secret) {
         throw new RuntimeException('Set PUSH_BASE_URL, PUSH_APP_ID and PUSH_APP_SECRET');
     }
-    $options = getopt('', ['channel:', 'signature:', 'params:', 'receiver:', 'send']);
+    $options = getopt('', ['channel:', 'locale:', 'signature:', 'params:', 'receiver:', 'send']);
     $client = new Client($baseUrl, $appId, $secret);
     $page = $client->listChannels()->getData();
     echo json_encode($page, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) . PHP_EOL;
@@ -28,7 +28,8 @@ try {
     if ($channelId === false) {
         throw new RuntimeException('--channel must be a positive integer');
     }
-    $detail = $client->getChannel($channelId)->getData();
+    $locale = $options['locale'] ?? null;
+    $detail = $client->getChannel($channelId, $locale)->getData();
     echo json_encode($detail, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) . PHP_EOL;
     if (!isset($options['send'])) {
         exit(0);
@@ -59,7 +60,7 @@ try {
     if ($receiver === '') {
         throw new RuntimeException('Provide --receiver for sending');
     }
-    $sent = $client->sendMessage($detail['id'], $receiver, $params, $signature);
+    $sent = $client->sendMessage($detail['id'], $receiver, $params, $signature, null, [], $locale);
     echo json_encode($sent->getData(), JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) . PHP_EOL;
 } catch (Throwable $e) {
     fwrite(STDERR, $e->getMessage() . PHP_EOL);

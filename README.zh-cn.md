@@ -15,16 +15,29 @@ Mliev 消息推送服务的 PHP SDK。支持短信、邮件、企业微信、钉
 
 ## 发送语言
 
-通用英文模板绑定 `en`，简繁中文分别使用 `zh-Hans`、`zh-Hant`。请求 `en-GB` 时优先使用英国模板，再尝试通用 `en`。省略语言时使用通道默认语言，整批收件人共用一个语言。用 `$client->getChannel(42, 'en-GB')` 可预览实际匹配的语言和签名选项，发送受理后以 `resolved_locale` 为准。
+给同一通道绑定一份通用英文模板 `en`，就能接收 `en`、`en-US` 和 `en-GB` 请求。需要英国专用文案时，再绑定 `en-GB`。省略请求语言时，服务端从通道的默认语言开始匹配。
 
-```php
-$result = $client->sendMessage(42, 'recipient@example.com', [], null, null, [], 'en');
-```
+| 请求语言 | 优先尝试的模板 |
+| --- | --- |
+| `en-GB` | `en-GB` → `en` |
+| `zh-TW`、`zh-HK`、`zh-MO` | 对应地区 → `zh-Hant` → `zh` |
+| `zh-CN`、`zh-SG` | 对应地区 → `zh-Hans` → `zh` |
+| `zh-Hant` 或 `zh-Hans` | 指定的简繁模板 → `zh` |
+| `zh-Hant-CN` | `zh-Hant-CN` → `zh-Hant` → `zh`（显式指定繁体） |
+| `zh` | 通用 `zh` |
+
+候选模板都不可用时，通道策略 `reject` 返回错误，`use_default` 继续匹配通道默认语言。签名在选定语言组内校验。请用同一个请求标签预览和发送，并从预览结果选择签名。
 
 ## 安装
 
 ```bash
 composer require mliev-sdk/push-php
+```
+
+语言预览需要支持该接口的服务端和 SDK。如果项目仍使用 `v1.2.0`，可用以下命令安装包含该功能的提交。
+
+```bash
+composer require 'mliev-sdk/push-php:dev-main#ed890dbae327b017c1da018b1237b48c13cf7956'
 ```
 
 ## 快速开始
@@ -73,16 +86,21 @@ $response = $client->sendMessage(
         'code' => '123456',
         'expire_time' => '5'
     ],
-    '公司名称',   // signature_names 中的别名；signature_required=true 时必填
-    '2025-12-01T10:00:00Z'  // 可选：定时发送时间（ISO 8601 格式）
+    'Notice',    // 从该语言预览的 signature_names 选择
+    null,        // scheduledAt，可传 ISO 8601 时间
+    [],          // attachments
+    'en-GB'      // locale
 );
 
 if ($response->isSuccess()) {
     $taskId = $response->getTaskId();
+    $resolvedLocale = $response->getData()['resolved_locale'] ?? null;
 }
 ```
 
 ### 批量发送消息
+
+同一批次共用请求语言、模板参数和签名。不同语言的收件人按语言分批提交。
 
 ```php
 $response = $client->sendBatch(
@@ -96,9 +114,13 @@ $response = $client->sendBatch(
         'content' => '系统将于今晚22:00进行维护',
         'duration' => '2小时'
     ],
-    '公司名称'
+    'Notice',
+    null,
+    [],
+    'en-GB'
 );
 
+$resolvedLocale = $response->getData()['resolved_locale'] ?? null;
 echo "批次 ID: " . $response->getBatchId() . "\n";
 echo "总数: " . $response->getData()['total_count'] . "\n";
 echo "成功: " . $response->getData()['success_count'] . "\n";
@@ -145,9 +167,13 @@ $response = $client->sendBatch(12, ['a@example.com', 'b@example.com'], [], 'invo
 $response = $client->queryTask('550e8400-e29b-41d4-a716-446655440000');
 
 $data = $response->getData();
+$requestedLocale = $data['requested_locale'] ?? null;
+$resolvedLocale = $data['resolved_locale'] ?? null;
 echo "状态: " . $data['status'] . "\n";
 echo "回调状态: " . ($data['callback_status'] ?? '无') . "\n";
 ```
+
+例如请求 `en-GB` 命中通用英文时，`requested_locale` 是 `en-GB`，`resolved_locale` 是 `en`。省略请求语言时前者缺省。历史任务也可能缺少后者。定时投递和重试沿用受理时选定的语言。
 
 ### 通道目录与可视化接入
 
@@ -162,7 +188,8 @@ foreach ($page['items'] as $channel) {
 }
 
 // 使用用户选择的通道 ID。
-$detail = $client->getChannel(42)->getData();
+$detail = $client->getChannel(42, 'en-GB')->getData();
+$matchedLocale = $detail['resolved_locale'] ?? null;
 if ($detail['template'] !== null) {
     echo $detail['template']['content'];
     $variables = $detail['template']['variables'];
@@ -172,8 +199,9 @@ $signatureNames = $detail['signature_names'];
 ```
 
 - 列表数据包含 `items/total/page/size`；每个通道包含 `id/name/type/message_template_id/template_name/readiness`，详情额外包含 `template/signature_required/signature_names`。
+- `getChannel($id)` 预览默认语言。列表项的 `readiness` 对应默认语言，`default_locale` 和 `locale_fallback_policy` 给出通道配置。按语言查询时，详情的顶层就绪状态和签名选项对应 `resolved_locale`。`locales` 列出各配置语言组。
 - `template` 包含系统模板的 `id/template_name/content_type/content/variables/description`；`readiness` 包含 `state` 和 `blocker_codes`。
-- `ready/degraded` 通道可选；`blocked` 仍是成功的配置查询结果，应在界面置灰并按需展示原因码。
+- 对预览的语言，`ready` 和 `degraded` 可发送。返回 `blocked` 时，查看 `blocker_codes`。仍可预览该通道的其他语言。
 - `template: null` 表示模板缺失或被删除；`variables: null` 表示变量配置无效，`variables: []` 表示没有变量。`getData()` 保留两者区别。
 - 为返回的每个变量在 `$templateParams` 中提供字符串值。`$signatureName` 从 `signature_names` 选择，适用于短信签名和邮件标题；`signature_required=true` 时必填，否则可传 null。空模板参数会以 JSON 对象 `{}` 发送。
 - 查询沿用 HMAC 鉴权与现有限流，不消耗发送配额。查询参数编码到 URL 但不参与签名，GET 正文为空。SDK 不缓存、不筛除不可用通道、不自动翻页。
@@ -186,9 +214,9 @@ export PUSH_BASE_URL='https://your-domain.com'
 export PUSH_APP_ID='your_app_id'
 export PUSH_APP_SECRET='your_app_secret'
 # 只查询配置。
-php examples/catalog.php --channel=42
+php examples/catalog.php --channel=42 --locale=en-GB
 # 将 ID、别名、变量和接收者替换为实际选择。
-php examples/catalog.php --channel=42 --signature='验证码' --params='{"code":"123456","expire":"5"}' --receiver='13800138000' --send
+php examples/catalog.php --channel=42 --locale=en-GB --signature='Notice' --params='{"code":"123456","expire":"5"}' --receiver='13800138000' --send
 ```
 
 服务端需提供 `GET /api/v1/channels` 和 `GET /api/v1/channels/{id}`。
