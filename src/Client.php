@@ -48,7 +48,7 @@ class Client
      * @param string|null $signatureName  Alias from signature_names; required when signature_required is true
      * @param string|null $scheduledAt    Scheduled time in ISO 8601 format (optional)
      * @param array       $attachments    EmailAttachment objects or attachment wire-format arrays
-     * @param string|null $locale         Optional language and country (e.g. en-US)
+     * @param string|null $locale         Optional language tag (e.g. en, zh-Hant or en-GB)
      *
      * @return Response
      * @throws MessagePushException
@@ -97,7 +97,7 @@ class Client
      * @param string|null $signatureName  Alias from signature_names; required when signature_required is true
      * @param string|null $scheduledAt    Scheduled time in ISO 8601 format (optional)
      * @param array       $attachments    EmailAttachment objects or attachment wire-format arrays shared by all receivers
-     * @param string|null $locale         Optional language and country shared by all receivers
+     * @param string|null $locale         Optional language tag shared by all receivers
      *
      * @return Response
      * @throws MessagePushException
@@ -223,12 +223,14 @@ class Client
      * Pass the selected signature_names alias unchanged to sendMessage/sendBatch.
      *
      * @param int $channelId Channel ID from listChannels()
+     * @param string|null $locale Preview matching and signature options for this language tag
      * @return Response
      * @throws MessagePushException
      */
-    public function getChannel(int $channelId): Response
+    public function getChannel(int $channelId, ?string $locale = null): Response
     {
-        return $this->request('GET', '/api/v1/channels/' . $channelId);
+        $query = $locale === null || $locale === '' ? [] : ['locale' => $locale];
+        return $this->request('GET', '/api/v1/channels/' . $channelId, null, $query);
     }
 
     /**

@@ -154,6 +154,17 @@ class CatalogTest extends TestCase
         }
     }
 
+    public function testPreviewLanguageUsesSignedChannelPath(): void
+    {
+        $this->routes(['GET /api/v1/channels/42' => $this->success(['resolved_locale' => 'en', 'signature_names' => ['generic']])]);
+        $data = $this->client->getChannel(42, 'en-GB')->getData();
+        self::assertSame('en', $data['resolved_locale']);
+        self::assertSame(['generic'], $data['signature_names']);
+        $request = $this->requests()[0];
+        self::assertSame(['locale' => 'en-GB'], $request['query']);
+        $this->assertSignedRequest($request);
+    }
+
     public function testCompleteDetailsPreserveReadinessAndNullValues(): void
     {
         foreach (['ready', 'degraded', 'missing template', 'invalid variables', 'no variables or signature'] as $scenario) {
