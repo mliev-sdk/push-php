@@ -267,6 +267,7 @@ class CatalogTest extends TestCase
             if ($request['method'] === 'POST') {
                 $body = json_decode($request['body'], true);
                 self::assertSame(42, $body['channel_id']);
+                self::assertArrayNotHasKey('locale', $body);
                 self::assertSame($alias, $body['signature_name']);
                 self::assertSame($params, $body['template_params']);
             }
@@ -314,14 +315,15 @@ class CatalogTest extends TestCase
             ],
         ];
 
-        $this->client->sendMessage(42, 'first@example.com', [], '通知', null, $attachments);
-        $this->client->sendBatch(42, ['first@example.com', 'second@example.com'], [], '通知', null, $attachments);
+        $this->client->sendMessage(42, 'first@example.com', [], '通知', null, $attachments, 'en-US');
+        $this->client->sendBatch(42, ['first@example.com', 'second@example.com'], [], '通知', null, $attachments, 'en-US');
 
         $requests = $this->requests();
         self::assertCount(2, $requests);
         foreach ($requests as $request) {
             $this->assertSignedRequest($request);
             $body = json_decode($request['body'], true);
+            self::assertSame('en-US', $body['locale']);
             self::assertSame('报告.txt', $body['attachments'][0]['filename']);
             self::assertSame('aGVsbG8=', $body['attachments'][0]['content_base64']);
             self::assertSame('AAEC', $body['attachments'][1]['content_base64']);

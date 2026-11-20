@@ -1,5 +1,11 @@
 {
   "id": 42,
+  "default_locale": "zh-CN",
+  "locale_fallback_policy": "reject",
+  "locales": {
+    "zh-CN": {"readiness": {"state": "ready", "blocker_codes": []}, "signature_required": true, "signature_names": ["验证码", "通知"]},
+    "en-US": {"readiness": {"state": "ready", "blocker_codes": []}, "signature_required": true, "signature_names": ["Notice"]}
+  },
   "name": "验证码通道",
   "type": "sms",
   "message_template_id": 7,
