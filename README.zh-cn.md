@@ -13,6 +13,14 @@ Mliev 消息推送服务的 PHP SDK。支持短信、邮件、企业微信、钉
 - cURL 扩展
 - JSON 扩展
 
+## 发送语言
+
+通用英文模板绑定 `en`，简繁中文分别使用 `zh-Hans`、`zh-Hant`。请求 `en-GB` 时优先使用英国模板，再尝试通用 `en`。省略语言时使用通道默认语言，整批收件人共用一个语言。用 `$client->getChannel(42, 'en-GB')` 可预览实际匹配的语言和签名选项，发送受理后以 `resolved_locale` 为准。
+
+```php
+$result = $client->sendMessage(42, 'recipient@example.com', [], null, null, [], 'en');
+```
+
 ## 安装
 
 ```bash

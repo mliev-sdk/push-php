@@ -13,6 +13,14 @@ PHP SDK for Mliev Message Push Service. Supports SMS, Email, WeChatWork, DingTal
 - cURL extension
 - JSON extension
 
+## Message language
+
+Use `en` for a generic English template, `zh-Hans` or `zh-Hant` for Chinese scripts, and `en-GB` for a regional override. An `en-GB` request can use `en` even under the reject policy. Omit the locale to use the channel default. A batch shares one locale. Use `$client->getChannel(42, 'en-GB')` to preview the matched language and signature options. Delivery uses the `resolved_locale` recorded at acceptance.
+
+```php
+$result = $client->sendMessage(42, 'recipient@example.com', [], null, null, [], 'en');
+```
+
 ## Installation
 
 ```bash
